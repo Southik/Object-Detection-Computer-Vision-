@@ -129,13 +129,17 @@ def histogram_equalization_filter(np_img):
     return cv2.cvtColor(ycrcb_img, cv2.COLOR_YCrCb2RGB)
 
 
-def edge_detection_filter(np_img, low_threshold=80, high_threshold=160):
+def edge_detection_filter(np_img, kernel_size=3):
     '''
-    Applies Canny edge detection and returns a 3-channel RGB edge image.
+    Applies Sobel edge detection and returns a 3-channel RGB edge image.
     '''
     gray_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
     gray_img = cv2.GaussianBlur(gray_img, (5, 5), 0)
-    edges = cv2.Canny(gray_img, low_threshold, high_threshold)
+    grad_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=kernel_size)
+    grad_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=kernel_size)
+    magnitude = cv2.magnitude(grad_x, grad_y)
+    edges = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
+    edges = edges.astype(np.uint8)
     return cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
 
 
