@@ -14,12 +14,10 @@ from urllib.request import urlretrieve
 @njit
 def histogram_figure_numba(np_img):
     '''
-    Jit compiled function to increase performance.
-    Use some loops insteads of purely numpy functions.
-    If you face some compile errors using @njit, see: https://numba.pydata.org/numba-doc/dev/reference/numpysupported.html
-    In case you dont need performance boosts, remove the njit flag above the function
-    Do not use cv2 functions together with @njit
+    Counts RGB intensity frequencies, finds the largest bin, then scales each
+    channel histogram to a 0-3 range for drawing.
     '''
+    # Histogram bins for each color channel.
     r_bars = np.zeros(256, dtype=np.float64)
     g_bars = np.zeros(256, dtype=np.float64)
     b_bars = np.zeros(256, dtype=np.float64)
@@ -27,12 +25,14 @@ def histogram_figure_numba(np_img):
     height = np_img.shape[0]
     width = np_img.shape[1]
 
+    # Count occurrences of every RGB intensity value.
     for y in range(height):
         for x in range(width):
             r_bars[np_img[y, x, 0]] += 1.0
             g_bars[np_img[y, x, 1]] += 1.0
             b_bars[np_img[y, x, 2]] += 1.0
 
+    # Find the largest histogram bin across all channels.
     max_count = 1.0
     for i in range(256):
         if r_bars[i] > max_count:
@@ -42,6 +42,7 @@ def histogram_figure_numba(np_img):
         if b_bars[i] > max_count:
             max_count = b_bars[i]
 
+    # Apply Hstogram formula (*3 is to normalize each histogram to the range 0-3)
     for i in range(256):
         r_bars[i] = (r_bars[i] / max_count) * 3.0
         g_bars[i] = (g_bars[i] / max_count) * 3.0
@@ -61,6 +62,7 @@ def image_statistics_numba(np_img):
     width = np_img.shape[1]
     total_pixels = height * width
 
+    # Build grayscale np.histogram
     for y in range(height):
         for x in range(width):
             r = int(np_img[y, x, 0])
@@ -82,6 +84,7 @@ def image_statistics_numba(np_img):
                 min_value = i
             max_value = i
             sum_values += i * count
+            # Track most common brightness value
             if count > mode_count:
                 mode_count = count
                 mode_value = i
@@ -96,8 +99,12 @@ def image_statistics_numba(np_img):
         count = gray_hist[i]
         if count > 0.0:
             diff = i - mean
+            
             variance += count * diff * diff
+
             probability = count / total_pixels
+
+            #entropy formula: -p * log2(p)
             entropy -= probability * (math.log(probability) / log_2)
 
     std_dev = math.sqrt(variance / total_pixels)
@@ -129,17 +136,16 @@ def histogram_equalization_filter(np_img):
     return cv2.cvtColor(ycrcb_img, cv2.COLOR_YCrCb2RGB)
 
 
-def edge_detection_filter(np_img, kernel_size=3):
+def edge_detection_filter(np_img, low_threshold=80, high_threshold=160):
     '''
     Applies Sobel edge detection and returns a 3-channel RGB edge image.
     '''
     gray_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
     gray_img = cv2.GaussianBlur(gray_img, (5, 5), 0)
-    grad_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=kernel_size)
-    grad_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=kernel_size)
-    magnitude = cv2.magnitude(grad_x, grad_y)
-    edges = cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX)
-    edges = edges.astype(np.uint8)
+    sobel_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=3)
+    magnitude = cv2.magnitude(sobel_x, sobel_y)
+    edges = cv2.convertScaleAbs(magnitude)
     return cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
 
 
