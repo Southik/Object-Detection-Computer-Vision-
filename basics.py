@@ -174,8 +174,10 @@ class NeuralFaceSmileFilter:
 
     def __call__(self, np_img):
         self._ensure_net()
+        # Grab image dimensions (height, width, channels).
         h_img, w_img, _ = np_img.shape
         bgr_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+        # Create a 300x300 blob with mean subtraction, as required by this model.
         blob = cv2.dnn.blobFromImage(
             bgr_img,
             1.0,
@@ -184,15 +186,20 @@ class NeuralFaceSmileFilter:
             swapRB=False,
             crop=False
         )
+        # Run a forward pass through the network to get detections.
         self.net.setInput(blob)
         detections = self.net.forward()
 
         output = np_img.copy()
         for i in range(detections.shape[2]):
             confidence = detections[0, 0, i, 2]
+            
+            # Skip low-confidence detections.
             if confidence < self.confidence_threshold:
                 continue
 
+            # detections[0,0,i,3:7] are normalized box coordinates (x1, y1, x2, y2).
+            # Multiply by image width/height to get pixel coordinates.
             box = detections[0, 0, i, 3:7] * np.array([w_img, h_img, w_img, h_img])
             x1, y1, x2, y2 = box.astype(np.int32)
             self._draw_smiley(output, x1, y1, x2 - x1, y2 - y1)
@@ -200,15 +207,25 @@ class NeuralFaceSmileFilter:
         return output
 
     def _ensure_net(self):
+        """
+        load the DNN model if it is not already loaded.
+        """
         self._ensure_model_files()
         if self.net is None:
             self.net = cv2.dnn.readNetFromCaffe(str(self.prototxt_path), str(self.model_path))
 
     def _ensure_model_files(self):
+        """
+        Check if the required model files exist and are of reasonable size. 
+        If not, download them.
+        """
         self._ensure_file(self.prototxt_path, self.PROTOTXT_URL, min_size=1_000)
         self._ensure_file(self.model_path, self.MODEL_URL, min_size=1_000_000)
 
     def _ensure_file(self, path, url, min_size):
+        """
+        Check if the file at 'path' exists and is larger than 'min_size' bytes.
+        """
         if path.exists() and path.stat().st_size > min_size:
             return
 
@@ -230,42 +247,54 @@ class NeuralFaceSmileFilter:
             )
 
     def _draw_smiley(self, np_img, x, y, width, height):
+        """
+        Draws a smiley face centered in the given bounding box.
+        """
+        # Clamp the bounding box to the image bounds.
         h_img, w_img, _ = np_img.shape
         x1 = max(0, x)
         y1 = max(0, y)
         x2 = min(w_img - 1, x + width)
         y2 = min(h_img - 1, y + height)
 
+        # Skip if the bounding box is invalid after clamping.
         if x2 <= x1 or y2 <= y1:
             return
 
+        # Calculate the center and radius for the smiley face, 
+        
         center_x = (x1 + x2) // 2
         center_y = (y1 + y2) // 2
         radius = max(8, int(min(x2 - x1, y2 - y1) * 0.58))
+        # ensuring it fits within the bounding box and image.)
         radius = min(radius, center_x, center_y, w_img - 1 - center_x, h_img - 1 - center_y)
 
         if radius <= 0:
             return
 
+        # Colors (B, G, R) for face, outline, and cheeks of smiley.
         yellow = (255, 220, 0)
         black = (0, 0, 0)
         rosy = (255, 120, 120)
 
+        # Draw the yellow face circle.
         cv2.circle(np_img, (center_x, center_y), radius, yellow, cv2.FILLED, lineType=cv2.LINE_AA)
+        # Draw a black outline around the face.
         cv2.circle(np_img, (center_x, center_y), radius, black, max(2, radius // 18), lineType=cv2.LINE_AA)
 
+        # ---- Eyes ----
         eye_radius = max(2, radius // 9)
         eye_y = center_y - radius // 4
         left_eye = (center_x - radius // 3, eye_y)
         right_eye = (center_x + radius // 3, eye_y)
         cv2.circle(np_img, left_eye, eye_radius, black, cv2.FILLED, lineType=cv2.LINE_AA)
         cv2.circle(np_img, right_eye, eye_radius, black, cv2.FILLED, lineType=cv2.LINE_AA)
-
+        # ---- Cheeks ----
         cheek_radius = max(2, radius // 11)
         cheek_y = center_y + radius // 8
         cv2.circle(np_img, (center_x - radius // 2, cheek_y), cheek_radius, rosy, cv2.FILLED, lineType=cv2.LINE_AA)
         cv2.circle(np_img, (center_x + radius // 2, cheek_y), cheek_radius, rosy, cv2.FILLED, lineType=cv2.LINE_AA)
-
+        # ---- Smile ----
         smile_center = (center_x, center_y + radius // 8)
         smile_axes = (max(4, radius // 2), max(3, radius // 3))
         cv2.ellipse(
