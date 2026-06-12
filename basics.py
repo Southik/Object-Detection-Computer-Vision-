@@ -57,7 +57,7 @@ def image_statistics_numba(np_img):
     Calculates brightness statistics from the current RGB frame.
     The brightness value is an integer luminance estimate from 0 to 255.
     '''
-    gray_hist = np.zeros(256, dtype=np.float64)
+    gray_hist = np.zeros(256, dtype=np.float64) #create 256 bins for each brightness value
     height = np_img.shape[0]
     width = np_img.shape[1]
     total_pixels = height * width
@@ -65,10 +65,11 @@ def image_statistics_numba(np_img):
     # Build grayscale np.histogram
     for y in range(height):
         for x in range(width):
+            #read rgb vals
             r = int(np_img[y, x, 0])
             g = int(np_img[y, x, 1])
             b = int(np_img[y, x, 2])
-            gray = (299 * r + 587 * g + 114 * b) // 1000
+            gray = (299 * r + 587 * g + 114 * b) // 1000 # convert rgb to grayscale brightness
             gray_hist[gray] += 1.0
 
     min_value = 0
